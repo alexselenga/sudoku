@@ -2,127 +2,73 @@
 
 namespace app\controllers;
 
+use app\ext\Sudoku;
+use app\models\Game;
 use Yii;
-use yii\filters\AccessControl;
 use yii\web\Controller;
-use yii\web\Response;
-use yii\filters\VerbFilter;
-use app\models\LoginForm;
-use app\models\ContactForm;
 
 class SiteController extends Controller
 {
-    /**
-     * {@inheritdoc}
-     */
-    public function behaviors()
-    {
-        return [
-            'access' => [
-                'class' => AccessControl::className(),
-                'only' => ['logout'],
-                'rules' => [
-                    [
-                        'actions' => ['logout'],
-                        'allow' => true,
-                        'roles' => ['@'],
-                    ],
-                ],
-            ],
-            'verbs' => [
-                'class' => VerbFilter::className(),
-                'actions' => [
-                    'logout' => ['post'],
-                ],
-            ],
-        ];
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function actions()
-    {
-        return [
-            'error' => [
-                'class' => 'yii\web\ErrorAction',
-            ],
-            'captcha' => [
-                'class' => 'yii\captcha\CaptchaAction',
-                'fixedVerifyCode' => YII_ENV_TEST ? 'testme' : null,
-            ],
-        ];
-    }
-
-    /**
-     * Displays homepage.
-     *
-     * @return string
-     */
     public function actionIndex()
     {
-        return $this->render('index');
+        return $this->renderContent('');
     }
 
-    /**
-     * Login action.
-     *
-     * @return Response|string
-     */
-    public function actionLogin()
+    public function actionGetNewGame()
     {
-        if (!Yii::$app->user->isGuest) {
-            return $this->goHome();
+        Yii::$app->response->format = Yii::$app->response::FORMAT_JSON;
+
+        Game::deleteAll();
+        $sudoku = new Sudoku;
+
+        for ($y = 0; $y < 9; $y++) {
+            for ($x = 0; $x < 9; $x++) {
+                $model = new Game;
+                $model->x = $x;
+                $model->y = $y;
+                $model->number = $sudoku->cells[$y][$x];
+                $model->save();
+            }
         }
 
-        $model = new LoginForm();
-        if ($model->load(Yii::$app->request->post()) && $model->login()) {
-            return $this->goBack();
+        return $sudoku->cells;
+    }
+
+    public function actionSetNumber($x, $y, $number)
+    {
+        Yii::$app->response->format = Yii::$app->response::FORMAT_JSON;
+
+        $models = Game::find()->all();
+        $cells = [];
+
+        foreach ($models as $model) {
+            $cells[$model->y][$model->x] = $model->number;
         }
 
-        $model->password = '';
-        return $this->render('login', [
-            'model' => $model,
-        ]);
-    }
+        $enabled = false;
+        $finished = false;
 
-    /**
-     * Logout action.
-     *
-     * @return Response
-     */
-    public function actionLogout()
-    {
-        Yii::$app->user->logout();
+        if (!$cells[$y][$x]) {
+            $sudoku = new Sudoku($cells);
+            $possibleValues = $sudoku->validateCell($x, $y);
+            $enabled = in_array($number, $possibleValues);
 
-        return $this->goHome();
-    }
+            if ($enabled) {
+                $model = Game::find()->where(['x' => $x, 'y' => $y])->one();
 
-    /**
-     * Displays contact page.
-     *
-     * @return Response|string
-     */
-    public function actionContact()
-    {
-        $model = new ContactForm();
-        if ($model->load(Yii::$app->request->post()) && $model->contact(Yii::$app->params['adminEmail'])) {
-            Yii::$app->session->setFlash('contactFormSubmitted');
+                if ($model) {
+                    $model->number = $number;
+                    $model->save();
 
-            return $this->refresh();
+                    $sudoku->cells[$y][$x] = $number;
+                    $finished = $sudoku->isFinished();
+                }
+            }
         }
-        return $this->render('contact', [
-            'model' => $model,
-        ]);
-    }
 
-    /**
-     * Displays about page.
-     *
-     * @return string
-     */
-    public function actionAbout()
-    {
-        return $this->render('about');
+        return [
+            'enabled' => $enabled,
+            'finished' => $finished,
+        ];
     }
 }
