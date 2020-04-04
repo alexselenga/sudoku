@@ -16,7 +16,7 @@ class Sudoku
         'randomSwapAreaColumns',
     ];
 
-    public function __construct($cells = null, $emptyCellCount = 30, $rndCount = 20) {
+    public function __construct($cells = null, $emptyCellCount = 30, $rndCount = 40) {
         if (is_array($cells)) {
             $this->cells = $cells;
         } else {
