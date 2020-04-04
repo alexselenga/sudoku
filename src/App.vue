@@ -127,8 +127,8 @@ export default {
     },
 
     async onSelectNumber (x, y, number) {
-      console.log(x, y, number)
       if (x === null || this.cells[y][x]) return
+
       const res = await fetch(this.backHost + 'site/set-number', {
         method: 'POST',
         body: JSON.stringify({ x, y, number }),

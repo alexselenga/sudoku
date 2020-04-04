@@ -9,7 +9,7 @@ use yii\web\Controller;
 
 class SiteController extends Controller
 {
-    const emptyCellCount = 20;
+    const emptyCellCount = 45;
 
     public function beforeAction($action)
     {
