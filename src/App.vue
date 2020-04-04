@@ -1,33 +1,46 @@
 <template>
   <div id="app">
     <h1>Судоку</h1>
-    <h2 v-if="finished">Игра закончена</h2>
-    <div class="sudoku">
-      <div class="sudoku__numbers">
-        <div
-            v-show="activeX !== null"
-            v-for="n of 9"
-            :key="n"
-            class="sudoku__number"
-            @click="onSelectNumber(n)"
-        >
-          <div>{{n}}</div>
-        </div>
+    <h2 v-if="finishedByUserName">Игра закончена игроком {{finishedByUserName}}</h2>
+    <div class="game">
+      <div class="side-bar">
+        <button @click="onNewGame()">Новая игра</button>
+        <br>
+        Имя:
+        <input id="user-name" type="text" v-model="userName">
+        <br>
+        Игроки:
+        <ul>
+          <li v-for="(userName, index) of userNames" :key="index">{{userName}}</li>
+        </ul>
       </div>
-      <div v-if="cells.length" class="sudoku__table">
-        <div v-for="y of 9" :key="y" class="sudoku__row">
+      <div class="sudoku">
+        <div class="sudoku__numbers">
           <div
-              v-for="x of 9"
-              :key="y * 9 + x"
-              class="sudoku__cell"
-              :class="{
-                'cell_br': x===3 || x===6,
-                'cell_bb': y===3 || y===6,
-                'cell_selected': activeX !== null && x === activeX + 1 && y === activeY + 1
-              }"
-              @click="onSelectCell(x - 1, y - 1)"
+              v-show="activeX !== null && !cells[activeY][activeX]"
+              v-for="number of 9"
+              :key="number"
+              class="sudoku__number"
+              @click="onSelectNumber(activeX, activeY, number)"
           >
-            <div>{{cells[y-1][x-1]}}</div>
+            <div>{{number}}</div>
+          </div>
+        </div>
+        <div v-if="cells.length" class="sudoku__table">
+          <div v-for="y of 9" :key="y" class="sudoku__row">
+            <div
+                v-for="x of 9"
+                :key="y * 9 + x"
+                class="sudoku__cell"
+                :class="{
+                  'cell_br': x===3 || x===6,
+                  'cell_bb': y===3 || y===6,
+                  'cell_selected': activeX !== null && x === activeX + 1 && y === activeY + 1
+                }"
+                @click="onSelectCell(x - 1, y - 1)"
+            >
+              <div>{{cells[y - 1][x - 1]}}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -41,46 +54,100 @@ import Vue from 'vue'
 export default {
   data () {
     return {
+      backHost: 'http://sudoku/',
+      wsHost: 'ws://sudoku:8089',
       cells: [],
+      userName: 'Alex',
       activeX: null,
       activeY: null,
-      finished: false
+      finishedByUserName: null,
+      userNames: [],
+      socket: null
     }
   },
+
   async mounted () {
-    const res = await fetch('http://sudoku/site/get-new-game')
-    this.cells = await res.json()
+    this.loadCurrentGame()
+    this.socket = new WebSocket(this.wsHost)
+
+    this.socket.onopen = () => {
+      this.socket.send(JSON.stringify({ type: 'setUserName', userName: this.userName }))
+    }
+
+    this.socket.onmessage = event => {
+      const data = JSON.parse(event.data)
+
+      switch (data.type) {
+        case 'refresh':
+          this.loadCurrentGame()
+          this.activeX = null
+          this.activeY = null
+          this.finishedByUserName = null
+          break
+        case 'setCell':
+          this.showCell(data)
+          break
+        case 'finished':
+          this.finishedByUserName = data.userName
+          break
+        case 'refreshUserNames':
+          this.userNames = data.userNames
+      }
+    }
   },
+
+  watch: {
+    userName: function (val) {
+      this.socket.send(JSON.stringify({ type: 'setUserName', userName: val }))
+    }
+  },
+
   methods: {
+    async loadCurrentGame () {
+      const res = await fetch(this.backHost + 'site/get-current-game')
+      this.cells = await res.json()
+    },
+
+    showCell ({ x, y, number }) {
+      Vue.set(this.cells[y], x, number)
+    },
+
+    async onNewGame () {
+      const res = await fetch(this.backHost + 'site/get-new-game')
+      this.cells = await res.json()
+      this.activeX = null
+      this.activeY = null
+      this.finishedByUserName = null
+      this.socket.send('refresh')
+    },
+
     onSelectCell (x, y) {
       this.activeX = x
       this.activeY = y
     },
-    async onSelectNumber (number) {
-      if (this.activeX === null || this.cells[this.activeY][this.activeX]) return
 
-      const res = await fetch('http://sudoku/site/set-number?x=' + this.activeX + '&y=' + this.activeY + '&number=' + number, {
-        method: 'GET'
-        // credentials: 'include',
-        // body: JSON.stringify({
-        //   x: this.activeX,
-        //   y: this.activeY,
-        //   number
-        // }),
-        // headers: {
-        //   'Content-Type': 'application/json;charset=utf-8'
-        // }
+    async onSelectNumber (x, y, number) {
+      console.log(x, y, number)
+      if (x === null || this.cells[y][x]) return
+      const res = await fetch(this.backHost + 'site/set-number', {
+        method: 'POST',
+        body: JSON.stringify({ x, y, number }),
+        headers: {
+          'Content-Type': 'application/json;charset=utf-8'
+        }
       })
 
       const data = await res.json()
 
       if (data.enabled) {
-        Vue.set(this.cells[this.activeY], this.activeX, number)
-        this.activeX = null
-        this.activeY = null
+        this.socket.send(JSON.stringify({ type: 'setCell', x, y, number }))
+        this.showCell({ x, y, number })
       }
 
-      this.finished = data.finished
+      if (data.finished) {
+        this.finishedByUserName = this.userName
+        this.socket.send(JSON.stringify({ type: 'finished', userName: this.userName }))
+      }
     }
   }
 }
@@ -107,11 +174,26 @@ h2 {
   font-size: 3em;
   color:red;
 }
-.sudoku {
+ul {
+  list-style: none;
+}
+button {
+  width: 160px;
+  height: 30px;
+  margin: 10px auto;
+}
+#user-name {
+  margin: 10px auto;
+}
+.game {
   display:flex;
   justify-content: space-around;
+  width: 1000px;
   margin: 40px auto;
-  width: 1070px;
+}
+.sudoku {
+  display:flex;
+  flex-direction: column;
 }
 .sudoku__table {
   display:flex;
@@ -124,9 +206,9 @@ h2 {
 .sudoku__cell {
   display:flex;
   justify-content: center;
-  width: 80px;
-  height: 80px;
-  border: 1px solid #4e555b;
+  width: 70px;
+  height: 70px;
+  border: 1px solid #aad2e2;
 }
 .sudoku__cell>div {
   display:flex;
@@ -139,37 +221,38 @@ h2 {
   cursor: pointer;
 }
 .sudoku .cell_br {
-  border-right: 3px solid #4e555b;
+  border-right: 4px solid #aad2e2;
 }
 .sudoku .cell_bb {
-  border-bottom: 3px solid #4e555b;
+  border-bottom: 4px solid #aad2e2;
 }
 .sudoku .cell_selected {
   background-color: cyan;
 }
 .sudoku__numbers {
   display:flex;
-  flex-direction: column;
   background-color: lightcyan;
-  width: 80px;
-  border: 1px solid #4e555b;
+  height: 70px;
+  margin-bottom: 20px;
 }
 .sudoku__number {
   display:flex;
   justify-content: center;
-  width: 80px;
-  height: 80px;
-  border: 1px solid #4e555b;
+  width: 70px;
+  height: 70px;
+  border: 1px solid #aad2e2;
 }
 .sudoku__number>div {
   display:flex;
   flex-direction: column;
   justify-content: center;
-  font-size: 4em;
+  font-size: 3em;
 }
 .sudoku__number:hover {
   background-color: cyan;
   cursor: pointer;
 }
-
+.side-bar {
+  width: 250px;
+}
 </style>

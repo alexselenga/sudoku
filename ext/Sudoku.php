@@ -17,7 +17,7 @@ class Sudoku
     ];
 
     public function __construct($cells = null, $emptyCellCount = 30, $rndCount = 20) {
-        if ($cells) {
+        if (is_array($cells)) {
             $this->cells = $cells;
         } else {
             $this->generateCells($emptyCellCount, $rndCount);
@@ -170,7 +170,7 @@ class Sudoku
 
     protected function swapRow($y1, $y2) {
         for ($x = 0; $x < 9; $x++) {
-            list($this->cells[$y1][$x], $this->cells[$y2][$x]) = [$this->cells[$y2][$x], $this->cells[$y1][$x]];
+            list ($this->cells[$y1][$x], $this->cells[$y2][$x]) = [$this->cells[$y2][$x], $this->cells[$y1][$x]];
         }
     }
 }

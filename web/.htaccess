@@ -2,6 +2,10 @@ RewriteEngine on
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule . index.php [L]
-Header set Access-Control-Allow-Origin 'http://localhost:8080'
+
+Header always set Access-Control-Allow-Origin: "*"
+Header always set Access-Control-Allow-Methods "POST, GET, PUT, DELETE, OPTIONS"
+Header always set Access-Control-Allow-Headers "X-Requested-With, content-type"
+
+#Header set Access-Control-Allow-Headers authorization
 #Header set Access-Control-Allow-Credentials true
-#Header set API-Key 'secret'

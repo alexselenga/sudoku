@@ -9,6 +9,20 @@ use yii\web\Controller;
 
 class SiteController extends Controller
 {
+    const emptyCellCount = 20;
+
+    public function beforeAction($action)
+    {
+        $this->enableCsrfValidation = false;
+
+        if (Yii::$app->controller->action->id != 'index') {
+            Yii::$app->request->parsers = ['application/json' => 'yii\web\JsonParser'];
+            Yii::$app->response->format = Yii::$app->response::FORMAT_JSON;
+        }
+
+        return parent::beforeAction($action);
+    }
+
     public function actionIndex()
     {
         return $this->renderContent('');
@@ -16,10 +30,8 @@ class SiteController extends Controller
 
     public function actionGetNewGame()
     {
-        Yii::$app->response->format = Yii::$app->response::FORMAT_JSON;
-
         Game::deleteAll();
-        $sudoku = new Sudoku;
+        $sudoku = new Sudoku(null, static::emptyCellCount);
 
         for ($y = 0; $y < 9; $y++) {
             for ($x = 0; $x < 9; $x++) {
@@ -34,10 +46,7 @@ class SiteController extends Controller
         return $sudoku->cells;
     }
 
-    public function actionSetNumber($x, $y, $number)
-    {
-        Yii::$app->response->format = Yii::$app->response::FORMAT_JSON;
-
+    public function actionGetCurrentGame() {
         $models = Game::find()->all();
         $cells = [];
 
@@ -45,8 +54,24 @@ class SiteController extends Controller
             $cells[$model->y][$model->x] = $model->number;
         }
 
+        return $cells;
+    }
+
+    public function actionSetNumber()
+    {
+        $post = Yii::$app->request->post();
+        $x = $post['x'];
+        $y = $post['y'];
+        $number = $post['number'];
+
         $enabled = false;
         $finished = false;
+        $models = Game::find()->all();
+        $cells = [];
+
+        foreach ($models as $model) {
+            $cells[$model->y][$model->x] = $model->number;
+        }
 
         if (!$cells[$y][$x]) {
             $sudoku = new Sudoku($cells);
